@@ -16,7 +16,7 @@ import react from "@vitejs/plugin-react";
 
   if (useProxy) {
     server.allowedHosts = [hmrHost];
-    server.hmr = { host: hmrHost, clientPort: hmrPort, proto>
+    server.hmr = { host: hmrHost, clientPort: hmrPort, protocol: hmrProtocol};
   }
 
   return {
