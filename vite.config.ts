@@ -26,6 +26,10 @@ export default defineConfig(() => {
 
   return {
     plugins: [react()],
+    // Ensure a single React instance is bundled (prevents "invalid hook call" errors)
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
     server,
   };
 });
