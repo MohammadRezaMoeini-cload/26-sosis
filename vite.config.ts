@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 // Only enable custom HMR/allowedHosts when deploying behind a reverse proxy.
 // For local development, keep Vite defaults to prevent reconnect loops.
 export default defineConfig(() => {
-  const hmrHost = process.env.HMR_HOST?.trim();
+  const hmrHost = recorder.artynew.com;
   const useProxy = Boolean(hmrHost);
   // Default to secure websocket when a proxy host is provided (typical HTTPS fronting)
   const hmrProtocol = (process.env.HMR_PROTOCOL || 'wss') as 'ws' | 'wss';
