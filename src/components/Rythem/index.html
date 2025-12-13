@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سکوئنسر درام</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="drum-machine">
+        <div class="controls">
+            <button id="play-pause-btn">پخش</button>
+            <div class="tempo-control">
+                <label for="bpm">BPM:</label>
+                <input type="number" id="bpm" value="120" min="40" max="240">
+            </div>
+            <div class="steps-control">
+                <label for="steps-count">تعداد پله:</label>
+                <select id="steps-count">
+                    <option value="8">8</option>
+                    <option value="16" selected>16</option>
+                    <option value="32">32</option>
+                </select>
+            </div>
+            <div class="pattern-name-control">
+                <input type="text" id="pattern-name" value="ریتم من">
+                <button id="save-pattern-btn">ذخیره</button>
+                <button id="load-pattern-btn">بارگذاری</button>
+            </div>
+        </div>
+
+        <div class="sequencer-grid-container">
+            <div class="step-indicators">
+                <!-- Indikator های پله اینجا با JS اضافه می شوند -->
+            </div>
+            <div id="sequencer-grid">
+                <!-- ردیف های سکوئنسر اینجا با JS اضافه می شوند -->
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

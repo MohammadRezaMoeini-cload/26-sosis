@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  recorder-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mohsen-recorder
+    ports:
+      - "8000:5173"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
+    networks:
+      - web-network
+
+networks:
+  web-network:
+    driver: bridge
