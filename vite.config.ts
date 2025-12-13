@@ -15,10 +15,12 @@ export default defineConfig(() => {
     host: true,
     port: 5173,
     strictPort: true,
+    // Allow production host to avoid Vite's dev-server host check when proxied
+    allowedHosts: ["recorder.artynew.com"],
   };
 
   if (useProxy) {
-    server.allowedHosts = [hmrHost];
+    server.allowedHosts = ["recorder.artynew.com", hmrHost];
     server.hmr = { host: hmrHost, clientPort: hmrPort, protocol: hmrProtocol };
   }
 
