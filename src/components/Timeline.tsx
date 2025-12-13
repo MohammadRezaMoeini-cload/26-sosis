@@ -1140,7 +1140,7 @@ export default function Timeline({ time, duration, tracks, onSeek, onPlay, onPau
         // Some engines return empty for very large point counts; retry with lower resolution
         let want = points;
         for (let i = 0; i < 3; i++) {
-          data = getClipWaveform(tId, clipId, want);
+          data = normalizeWaveform(getClipWaveform(tId, clipId, want));
           if (data && data.length > 8) break;
           want = Math.max(128, Math.floor(want / 2));
         }
@@ -1163,14 +1163,14 @@ export default function Timeline({ time, duration, tracks, onSeek, onPlay, onPau
       if (getClipWaveform) {
         let want = desired;
         for (let i = 0; i < 3; i++) {
-          data = getClipWaveform(tId, clipId, want);
+          data = normalizeWaveform(getClipWaveform(tId, clipId, want));
           if (data && data.length > 8) break;
           want = Math.max(256, Math.floor(want / 2));
         }
       } else if (clip.buffer) {
         data = downsampleBuffer(clip.buffer, clip.offsetSec, clip.durationSec, desired);
       }
-      if (data) originalWaveCache.current.set(String(clipId), { points: data.length, data });
+      if (data) originalWaveCache.current.set(String(clipId), { points: wavePointCount(data), data });
     } catch { }
   };
 
@@ -1178,12 +1178,13 @@ export default function Timeline({ time, duration, tracks, onSeek, onPlay, onPau
   const sliceOriginalWave = (clipId: string, baseBegin: number, baseEnd: number, begin: number, end: number): Float32Array | undefined => {
     const entry = originalWaveCache.current.get(String(clipId));
     if (!entry || !entry.data || entry.data.length === 0) return undefined;
+    const pointCount = wavePointCount(entry.data);
     const total = Math.max(1e-6, baseEnd - baseBegin);
     const p0 = Math.max(0, Math.min(1, (begin - baseBegin) / total));
     const p1 = Math.max(0, Math.min(1, (end - baseBegin) / total));
-    const i0 = Math.max(0, Math.floor(p0 * (entry.data.length - 1)));
-    const i1 = Math.max(i0 + 1, Math.min(entry.data.length, Math.ceil(p1 * (entry.data.length - 1))));
-    try { return entry.data.subarray(i0, i1); } catch { return undefined; }
+    const i0 = Math.max(0, Math.floor(p0 * (pointCount - 1)));
+    const i1 = Math.max(i0 + 1, Math.min(pointCount, Math.ceil(p1 * (pointCount - 1))));
+    try { return entry.data.subarray(i0 * 2, i1 * 2); } catch { return undefined; }
   };
   
   // Expand base bounds when clips are extended so waveform slices cover the full visible range.
@@ -2112,15 +2113,16 @@ export default function Timeline({ time, duration, tracks, onSeek, onPlay, onPau
                       // Crop the window data to the visible portion in seconds (unless moving, then draw full window)
                       let slice: Float32Array | undefined = windowData;
                       try {
-                        if (windowData && windowData.length > 0 && !isMovingThis) {
-                          const segDurSec = Math.max(1e-6, (renderEnd - renderBegin));
-                          const hiddenLeftSec = hiddenLeftPx / Math.max(1e-6, pxPerSec);
-                          const visibleSec = Math.max(1e-6, Math.min(segDurSec - hiddenLeftSec, visibleWidth / Math.max(1e-6, pxPerSec)));
-                          const totalN = windowData.length - 1;
-                          const sIdx = Math.max(0, Math.floor((hiddenLeftSec / segDurSec) * totalN));
-                          const eIdx = Math.max(sIdx + 1, Math.min(windowData.length, Math.ceil(((hiddenLeftSec + visibleSec) / segDurSec) * totalN)));
-                          slice = windowData.subarray(sIdx, eIdx);
-                        }
+                      if (windowData && windowData.length > 0 && !isMovingThis) {
+                        const segDurSec = Math.max(1e-6, (renderEnd - renderBegin));
+                        const hiddenLeftSec = hiddenLeftPx / Math.max(1e-6, pxPerSec);
+                        const visibleSec = Math.max(1e-6, Math.min(segDurSec - hiddenLeftSec, visibleWidth / Math.max(1e-6, pxPerSec)));
+                        const totalPoints = wavePointCount(windowData);
+                        const totalN = totalPoints - 1;
+                        const sIdx = Math.max(0, Math.floor((hiddenLeftSec / segDurSec) * totalN));
+                        const eIdx = Math.max(sIdx + 1, Math.min(totalPoints, Math.ceil(((hiddenLeftSec + visibleSec) / segDurSec) * totalN)));
+                        slice = windowData.subarray(sIdx * 2, eIdx * 2);
+                      }
                       } catch { /* keep slice */ }
 
                       // Force canvas remount when any of these change
@@ -2608,29 +2610,28 @@ function SecondCell({ left, width, second, pxPerSec, minorPerMajor, majorSec, sh
     bg.addColorStop(0, '#0b1220'); bg.addColorStop(1, '#0f172a');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
     if (!data || data.length === 0) return;
+    const samples = Math.max(1, Math.floor(data.length / 2));
     const mid = height / 2;
     const amp = 0.8; // make waveform a little smaller
     ctx.beginPath();
     ctx.moveTo(0, mid);
     for (let x = 0; x < width; x++) {
-      const pos = (x / Math.max(1, width)) * (data.length - 1);
+      const pos = (x / Math.max(1, width)) * (samples - 1);
       const i0 = Math.floor(pos);
-      const i1 = Math.min(data.length - 1, i0 + 1);
+      const i1 = Math.min(samples - 1, i0 + 1);
       const t = pos - i0;
-      const v0 = Math.max(0, Math.min(1, data[i0] || 0));
-      const v1 = Math.max(0, Math.min(1, data[i1] || 0));
-      const v = v0 + (v1 - v0) * t; // linear interpolate for smoother curve
-      ctx.lineTo(x, mid - v * mid * amp);
+      const hi0 = clampWave(data[i0 * 2 + 1]); const hi1 = clampWave(data[i1 * 2 + 1]);
+      const hi = hi0 + (hi1 - hi0) * t; // linear interpolate for smoother curve
+      ctx.lineTo(x, mid - hi * mid * amp);
     }
     for (let x = width - 1; x >= 0; x--) {
-      const pos = (x / Math.max(1, width)) * (data.length - 1);
+      const pos = (x / Math.max(1, width)) * (samples - 1);
       const i0 = Math.floor(pos);
-      const i1 = Math.min(data.length - 1, i0 + 1);
+      const i1 = Math.min(samples - 1, i0 + 1);
       const t = pos - i0;
-      const v0 = Math.max(0, Math.min(1, data[i0] || 0));
-      const v1 = Math.max(0, Math.min(1, data[i1] || 0));
-      const v = v0 + (v1 - v0) * t;
-      ctx.lineTo(x, mid + v * mid * amp);
+      const lo0 = clampWave(data[i0 * 2]); const lo1 = clampWave(data[i1 * 2]);
+      const lo = lo0 + (lo1 - lo0) * t;
+      ctx.lineTo(x, mid - lo * mid * amp);
     }
     ctx.closePath();
     ctx.fillStyle = '#a7f3d0';
@@ -2731,16 +2732,42 @@ function downsampleBuffer(buf: AudioBuffer, offsetSec: number, durationSec: numb
   const sr = buf.sampleRate; const start = Math.floor(offsetSec * sr); const end = Math.min(buf.length, Math.floor((offsetSec + durationSec) * sr));
   const length = Math.max(0, end - start); if (length <= 0) return new Float32Array(0);
   const stride = Math.max(1, Math.floor(length / points));
-  const out = new Float32Array(points); const chs = buf.numberOfChannels;
+  const out = new Float32Array(points * 2); const chs = buf.numberOfChannels;
   for (let p = 0; p < points; p++) {
-    const begin = start + p * stride; const stop = Math.min(end, begin + stride); let peak = 0;
+    const begin = start + p * stride; const stop = Math.min(end, begin + stride);
+    let minV = 1, maxV = -1;
     for (let i = begin; i < stop; i++) {
-      let sum = 0; for (let c = 0; c < chs; c++) sum += Math.abs((buf.getChannelData(c)[i] || 0));
-      const v = sum / chs; if (v > peak) peak = v;
+      let sum = 0; for (let c = 0; c < chs; c++) sum += (buf.getChannelData(c)[i] || 0);
+      const v = sum / Math.max(1, chs);
+      if (v < minV) minV = v; if (v > maxV) maxV = v;
     }
-    out[p] = peak;
+    if (stop <= begin) { minV = 0; maxV = 0; }
+    out[p * 2] = clampWave(minV);
+    out[p * 2 + 1] = clampWave(maxV);
   }
   return out;
+}
+
+function clampWave(v: number | undefined): number { return Math.max(-1, Math.min(1, v || 0)); }
+
+function normalizeWaveform(raw?: Float32Array): Float32Array {
+  if (!raw) return new Float32Array(0);
+  const hasNegative = raw.some(v => v < -1e-4);
+  const hasPairs = raw.length % 2 === 0 && hasNegative;
+  if (hasPairs) return raw;
+  const out = new Float32Array(raw.length * 2);
+  for (let i = 0; i < raw.length; i++) {
+    const v = clampWave(raw[i]);
+    const mag = Math.abs(v);
+    out[i * 2] = -mag; // min
+    out[i * 2 + 1] = mag; // max
+  }
+  return out;
+}
+
+function wavePointCount(data?: Float32Array): number {
+  if (!data || data.length === 0) return 0;
+  return Math.max(1, Math.floor(data.length / 2));
 }
 function FXFloatingPanel({ x, y, width, title = 'Panel', onClose, children, time, onPause }: { x: number; y: number; width?: number; title?: string; onClose: () => void; children: React.ReactNode; time?: number; onPause?: () => void }) {
   const [pos, setPos] = useState<{ x: number; y: number }>({ x, y });
